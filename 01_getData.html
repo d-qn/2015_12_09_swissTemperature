@@ -81,7 +81,7 @@ img {
 <div id="settings" class="section level3">
 <h3>Settings</h3>
 <pre class="r"><code>downloadData &lt;- FALSE
-stations &lt;- c('BAS', 'BER', 'GVE')</code></pre>
+stations &lt;- &quot;LUG&quot; #c('BAS', 'BER', 'GVE')</code></pre>
 </div>
 <div id="get-data-of-each-stations" class="section level3">
 <h3>Get data of each stations</h3>
@@ -134,35 +134,59 @@ df &lt;- dd %&gt;% group_by(year, month) %&gt;% summarise(monthlyAverage = mean 
 ## Compute the yearly average
 df &lt;- df %&gt;% group_by(year) %&gt;% mutate(yearlyAverage = mean(monthlyAverage)) %&gt;% ungroup()
 
-# add a boolean column if the yearly average was the highest so far
-df$newYearlyMax &lt;- df$yearlyAverage == cummax(df$yearlyAverage)
-
 # set the month as factor
-df$month &lt;- as.factor(df$month)</code></pre>
+df$month &lt;- as.factor(df$month)
+
+# compute the average by month
+average &lt;- df %&gt;% filter(year &lt; 2015) %&gt;% group_by(month) %&gt;% 
+  summarise(average = mean(monthlyAverage)) %&gt;% ungroup()
+
+# add a boolean column if the yearly average was hotter than the average over all years &amp; a new cumulative max
+df$hotterThanAverage &lt;- df$yearlyAverage &gt; mean(average$average) &amp; df$yearlyAverage == cummax(df$yearlyAverage)</code></pre>
 </div>
-<div id="define-ggplot-theme" class="section level2">
-<h2>Define ggplot theme</h2>
+<div id="define-ggplot-theme-and-graphic-parameters" class="section level2">
+<h2>Define ggplot theme and graphic parameters</h2>
 <pre class="r"><code>library(animation)
 
-ggtheme &lt;- function (yaxis = FALSE, base_family = &quot;Open Sans&quot;, base_family2 = &quot;Open Sans Semibold&quot;, 
+fontR &lt;- &quot;Open Sans&quot;
+fontSB &lt;- &quot;Open Sans Semibold&quot;
+fontL &lt;- &quot;Open Sans Light&quot;
+smoothAv.col &lt;- &quot;#8c8c8c&quot;
+
+hline.size &lt;- 0.5 
+line.text.size &lt;- 4
+title &lt;- &quot;Comment est-ce que la Suisse se réchauffe t-elle?&quot;
+subtitle &lt;- &quot;&quot;
+
+ggtheme &lt;- function (yaxis = FALSE, base_family = fontR, base_family2 = fontSB,
     base_size = 11, axisColor = &quot;#7E8279&quot;) 
 {
     choose_font(base_family, FALSE)
     choose_font(base_family2, FALSE)
     ret &lt;- theme_minimal(base_family = base_family, base_size = base_size) + 
-        theme(plot.title = element_text(hjust = 0, vjust = 5, 
-            size = rel(2), face = &quot;bold&quot;), axis.text = element_text(size = rel(1.3)), 
-            axis.title = element_text(size = rel(1.6), family = base_family2, 
-                color = axisColor), axis.title.x = element_text(hjust = 1, 
-                vjust = -0.15), axis.title.y = element_text(vjust = 1, 
-                hjust = 1), axis.line = element_line(linetype = &quot;solid&quot;, 
-                size = 0.9, color = axisColor, lineend = &quot;round&quot;), 
-            axis.ticks = element_line(size = 0.3, color = axisColor), 
+        theme(
+            plot.title = element_text(hjust = 0.9, vjust = 5, 
+              size = rel(7), family = base_family2, color = &quot;#ebc7c7&quot;), 
+            axis.text = element_text(size = rel(1.3)), 
+            axis.title = element_text(size = rel(1.4), family = base_family2, 
+                color = axisColor), 
+            axis.line = element_line(linetype = &quot;solid&quot;, 
+                size = 0.5, color = axisColor, lineend = &quot;round&quot;),
+            axis.ticks = element_line(size = 0.5, color = axisColor), 
             axis.ticks.length = unit(2.5, &quot;mm&quot;), 
-            plot.margin = unit(c(1, 2.5, 0.3, 0.5), &quot;cm&quot;), 
+            plot.margin = unit(c(0.3, 0.7, 0, 0), &quot;cm&quot;), 
             panel.grid = element_blank()
           )
     ret
+}
+
+gridFormat &lt;- function(gg, top = title, bottom = &quot;Températures moyennes mesurées à Lugano | swissinfo.ch | source: MétéoSuisse&quot;) {
+    grid.arrange(gg, 
+      top = textGrob(top, x = 0.05, y = 0.1, vjust = 0.1, hjust = 0, 
+        gp = gpar(fontsize = 24, fontfamily = fontL, col = &quot;black&quot;)),
+      bottom = textGrob(bottom, x = 0.97, y = 1, vjust = 0, hjust = 1, 
+        gp = gpar(fontsize = 8, fontfamily = fontR, col = &quot;#b3b3b3&quot;))
+    )
 }</code></pre>
 </div>
 <div id="plot-test" class="section level2">
@@ -172,71 +196,102 @@ y.range &lt;- range(df$monthlyAverage)
 yAverage.range &lt;- range(df$yearlyAverage)
 
 # define colors
-ncol.breaks &lt;- 9
-cpal &lt;- colorRampPalette(colors = c(&quot;#366096&quot;, &quot;#ab3d3f&quot;))
-#col.breaks &lt;- seq(yAverage.range[1], yAverage.range[2], length.out = ncol.breaks + 1)
+ncol.breaks &lt;- 7
+cpal &lt;- colorRampPalette(colors = c(&quot;#69b8c9&quot;, &quot;#cc0000&quot;))
 df$colorGroup &lt;- cut(df$yearlyAverage, breaks = ncol.breaks)
 group.colors &lt;- structure(cpal(nlevels(df$colorGroup)), names = levels(df$colorGroup))
 
-
 #ggplot(data = df) + geom_line(aes(month, monthlyAverage, group = year, colour = yearlyAverage), size = 0.1, alpha = 0.8) 
 
-
-saveGIF({
+saveGIF({ 
+   # add average overall smoothed curved
+  bg.p1 &lt;- ggplot() +  
+      geom_smooth(data = average, aes(month, average, group = 1), 
+        size = 2.5, se = F, alpha = 0.2, color = smoothAv.col) +
+        ggtheme() + scale_y_continuous(limits = y.range, expand = c(0, 0), name = &quot;&quot;) + 
+        scale_x_discrete(expand = c(0, 0), name = &quot;&quot;) + ggtitle(&quot;&quot;)
+  bg.p2 &lt;- bg.p1 + geom_text(data = data.frame(x = 6.5, y = 23, 
+    label = &quot;Historical monthly average: 1864-2014&quot;), size = 6,
+    aes(x = x,y = y,label = label), family = fontSB, hjust = 0.5, color = smoothAv.col)
+   gridFormat(bg.p2) 
+   bg.p3 &lt;- bg.p2 + geom_hline(yintercept = mean(average$average),
+        linetype = 2, alpha = 0.9, color = smoothAv.col) 
+   gridFormat(bg.p3)
+   bg.p4 &lt;- bg.p3 + 
+    geom_text(data = data.frame(x = 1, y = mean(average$average), 
+      label = paste0(&quot; &quot;, &quot;average 1864-2014: &quot;, formatC(mean(average$average), digits = 3), &quot;°C&quot;)), 
+      size = line.text.size, color = smoothAv.col,
+      aes(x = x,y = y,label = label), family = fontR, hjust =  0, vjust = 1.4)
+  
+   invisible(sapply(1:6, function(i) gridFormat(bg.p4, top = title)))
+    
+   bg.p &lt;- bg.p1 + 
+    geom_hline(yintercept = mean(average$average),
+      linetype = 2, alpha = 0.5, color = smoothAv.col) + 
+    geom_text(data = data.frame(x = 1, y = mean(average$average), 
+      label = paste0(&quot; &quot;, &quot;average 1864-2014: &quot;, formatC(mean(average$average), digits = 3), &quot;°C&quot;)), 
+      size = line.text.size, color = smoothAv.col, alpha = 0.9,
+      aes(x = x,y = y,label = label), family = fontR, hjust =  0, vjust = 1.4)
+  gridFormat(bg.p)
+  
+  ## 1. animation by year
   sapply(unique(df$year), function(y) {
     cat(&quot;\n&quot;, y)
     ddd &lt;- filter(df, year == y)
     # background : past years
-    bg.p &lt;- ggplot(data = df %&gt;% filter(year &lt; y, newYearlyMax == FALSE)) + 
-      geom_line(aes(month, monthlyAverage, group = year), colour = &quot;lightgrey&quot;, size = 0.3, alpha = 0.5) + 
-      ggtheme() + scale_y_continuous(limits = y.range, expand = c(0, 0)) + scale_x_discrete(expand = c(0, 0))
+    p1 &lt;- bg.p + 
+      geom_line(data = df %&gt;% filter(year &lt; y, hotterThanAverage == FALSE),
+      aes(month, monthlyAverage, group = year, colour = colorGroup), size = 0.3, alpha = 0.4) + 
+      scale_color_manual(values = group.colors) + guides(color = &quot;none&quot;)
+      
+    # background : the last year hotter than the average &amp; previous max
+    prior.max &lt;- df %&gt;% filter(year &lt; y, hotterThanAverage == TRUE) %&gt;% 
+      group_by(year, colorGroup) %&gt;% summarise(max = last(yearlyAverage)) %&gt;% ungroup()
     
-    # background : the maximum years colored
-    ddd.max &lt;- df %&gt;% filter(year &lt; y, newYearlyMax == TRUE)
-    temp.max &lt;- ddd.max %&gt;% group_by(year, colorGroup) %&gt;% summarise(max = last(yearlyAverage)) %&gt;% ungroup() %&gt;% tail(1)
-    old.max &lt;- ddd.max %&gt;% group_by(year, colorGroup) %&gt;% summarise(max = last(yearlyAverage)) %&gt;% ungroup()
-    old.max &lt;- old.max[-c(nrow(old.max)),] 
-    
+    temp.max &lt;- prior.max %&gt;% tail(1)
+    old.max &lt;- prior.max[-nrow(prior.max),]
+    old.max$alpha &lt;- seq(0.05, 0.4, length.out = nrow(old.max))
     
    # add horizontal line for the latest max yearly temp
-    if(nrow(ddd.max) == 0) {
-      bg.p2 &lt;- bg.p + scale_color_manual(values = group.colors) + guides(color = &quot;none&quot;)
+    if(nrow(temp.max) == 0) {
+      p2 &lt;- p1
     } else {
-     bg.p2 &lt;- bg.p + geom_hline(yintercept = temp.max$max, linetype = 2, alpha = 0.5, colour =  as.vector(group.colors[temp.max$colorGroup])) + 
-      geom_text(data = data.frame(x = 12, y = temp.max$max, label = as.character(temp.max$year), stringsAsFactors = F), 
-      aes(x = x, y = y, label = label), family = &quot;Open Sans&quot;, size = 4, colour = as.vector(group.colors[temp.max$colorGroup]),
-      hjust = 1, vjust = -0.25)
-     
-     if(nrow(old.max) &gt; 0) {
-       bg.p2 &lt;- bg.p2 + geom_hline(yintercept = old.max$max, linetype = 2, alpha = 0.15, colour =  as.vector(group.colors[old.max$colorGroup]))
-     }
-     
-    
-    bg.p2 &lt;- bg.p2 + geom_line(data = ddd.max, 
-        aes(month, monthlyAverage, group = year, colour = colorGroup), size = 0.3, alpha = 0.6) + 
-        scale_color_manual(values = group.colors) + guides(color = &quot;none&quot;)
-    }
-    
-    main.p &lt;- bg.p2 + geom_line(data = ddd, aes(month, monthlyAverage, group = year, colour = colorGroup), size = 1.5) + ggtitle(y)
-    
-    if(unique(ddd$newYearlyMax)) {
-      main.p2 &lt;- main.p + geom_hline(yintercept = unlist(ddd[1, 'yearlyAverage']), linetype = 2, size = 1, colour = as.vector(group.colors[unlist(ddd[1, 'colorGroup'])])) + 
-        geom_text(data = data.frame(x = 12, y = unlist(ddd[1, 'yearlyAverage']), label = as.character(y), stringsAsFactors = F), fontface =&quot;bold&quot;,
-                  aes(x = x, y = y, label = label), family = &quot;Open Sans&quot;, size = 5, colour = as.vector(group.colors[unlist(ddd[1,'colorGroup'])]),
-                  hjust = 1, vjust = -0.3) + 
-        geom_text(data = data.frame(x = 1, y = unlist(ddd[1, 'yearlyAverage']), label = paste0(formatC(unlist(ddd[1, 'yearlyAverage']), digits = 3), &quot; °C&quot;), stringsAsFactors = F), 
-                  aes(x = x, y = y, label = label), family = &quot;Open Sans&quot;, size = 5, colour = as.vector(group.colors[unlist(ddd[1,'colorGroup'])]),
-                  hjust = -0.1, vjust = -0.3)
+      p2 &lt;- p1 + 
+        geom_hline(yintercept = temp.max$max, linetype = 5, alpha = 0.9, 
+          colour =  as.vector(group.colors[temp.max$colorGroup])) + 
+        geom_text(data = data.frame(x = 12, y = temp.max$max, 
+          label = paste0(formatC(temp.max$max), &quot;° &quot;, temp.max$year)), 
+          aes(x = x, y = y, label = label), family = fontR, size = line.text.size, 
+          colour = as.vector(group.colors[temp.max$colorGroup]),
+          hjust = 1, vjust = 1.25, alpha = 0.9)
       
-      print(main.p2)
-      #print(main.p2)
-    } else {
-      print(main.p)
-      if(y == 2015) sapply(1:10, function(i) print(main.p))
+      if(nrow(old.max) &gt; 0) {
+        p2 &lt;- p2 + geom_hline(yintercept = old.max$max, linetype = &quot;dotted&quot;, alpha = old.max$alpha, 
+          colour =  as.vector(group.colors[old.max$colorGroup]))
+      }
     }
     
+    main.p &lt;- p2 + 
+      geom_line(data = ddd, aes(month, monthlyAverage, group = year, colour = colorGroup), size = 1.1) + 
+      ggtitle(y) 
+    
+    if(unique(ddd$hotterThanAverage)) {
+      main.p2 &lt;- main.p + 
+        geom_hline(yintercept = unlist(ddd[1, 'yearlyAverage']), 
+          linetype = 5, size = 1, 
+          colour = as.vector(group.colors[unlist(ddd[1, 'colorGroup'])])) + 
+        geom_text(data = data.frame(x = 12, y = unlist(ddd[1, 'yearlyAverage']), 
+          label = paste0(formatC(unlist(ddd[1, 'yearlyAverage'])), &quot;° &quot;, y)),
+          aes(x = x, y = y, label = label), family = fontR, size = 4, 
+          colour = as.vector(group.colors[unlist(ddd[1,'colorGroup'])]),
+          hjust = 1, vjust = -0.3)
+    } else {
+      main.p2 &lt;- main.p
+    }
+    gridFormat(main.p2)
+    if(y == 2015) sapply(1:10, function(i) gridFormat(main.p2))
   })  
-}, interval = 0.25, movie.name = &quot;swissTemperature.gif&quot;, ani.width = 640, ani.height = 800)</code></pre>
+}, interval = 0.4, movie.name = &quot;swissTemperature.gif&quot;, ani.width = 640, ani.height = 800)</code></pre>
 <pre><code>## 
 ##  1864</code></pre>
 <pre><code>## 
@@ -542,7 +597,7 @@ saveGIF({
 <pre><code>## 
 ##  2015</code></pre>
 <pre><code>## Executing: 
-## 'convert' -loop 0 -delay 25 Rplot1.png Rplot2.png Rplot3.png
+## 'convert' -loop 0 -delay 40 Rplot1.png Rplot2.png Rplot3.png
 ##     Rplot4.png Rplot5.png Rplot6.png Rplot7.png Rplot8.png
 ##     Rplot9.png Rplot10.png Rplot11.png Rplot12.png Rplot13.png
 ##     Rplot14.png Rplot15.png Rplot16.png Rplot17.png Rplot18.png
@@ -578,7 +633,9 @@ saveGIF({
 ##     Rplot151.png Rplot152.png Rplot153.png Rplot154.png
 ##     Rplot155.png Rplot156.png Rplot157.png Rplot158.png
 ##     Rplot159.png Rplot160.png Rplot161.png Rplot162.png
-##     'swissTemperature.gif'
+##     Rplot163.png Rplot164.png Rplot165.png Rplot166.png
+##     Rplot167.png Rplot168.png Rplot169.png Rplot170.png
+##     Rplot171.png 'swissTemperature.gif'
 ## Output at: swissTemperature.gif</code></pre>
 <pre><code>## [1] TRUE</code></pre>
 </div>
