@@ -126,26 +126,29 @@ colnames(data)[1:3] &lt;- c('year', 'month', 'temp')</code></pre>
 </div>
 <div id="shape-the-data" class="section level2">
 <h2>Shape the data</h2>
-<pre class="r"><code>## Subset to take only the 3 western &amp; north stations: Basel, Bern and Geneva
-dd &lt;- data %&gt;% filter(station %in% stations)
+<pre class="r"><code>shapeData &lt;- function(data, stations) {
+  stopifnot(length(stations) &gt; 0)
+  
+  ## Subset to take only the stations
+  dd &lt;- data %&gt;% filter(station %in% stations)
+  ## Compute the monthly average
+  df &lt;- dd %&gt;% group_by(year, month) %&gt;% summarise(monthlyAverage = mean (temp, na.rm = T)) %&gt;% ungroup()
+  ## Compute the yearly average
+  df &lt;- df %&gt;% group_by(year) %&gt;% mutate(yearlyAverage = mean(monthlyAverage)) %&gt;% ungroup()
+  # set the month as factor
+  df$month &lt;- as.factor(df$month)
 
-## Compute the monthly average
-df &lt;- dd %&gt;% group_by(year, month) %&gt;% summarise(monthlyAverage = mean (temp, na.rm = T)) %&gt;% ungroup()
-## Compute the yearly average
-df &lt;- df %&gt;% group_by(year) %&gt;% mutate(yearlyAverage = mean(monthlyAverage)) %&gt;% ungroup()
-
-# set the month as factor
-df$month &lt;- as.factor(df$month)
-
-# compute the average by month
-average &lt;- df %&gt;% filter(year &lt; 2015) %&gt;% group_by(month) %&gt;% 
-  summarise(average = mean(monthlyAverage)) %&gt;% ungroup()
-
-# add a boolean column if the yearly average was hotter than the average over all years &amp; a new cumulative max
-df$hotterThanAverage &lt;- df$yearlyAverage &gt; mean(average$average) &amp; df$yearlyAverage == cummax(df$yearlyAverage)</code></pre>
+  # compute the average by month prior to 2015
+  average &lt;- df %&gt;% filter(year &lt; 2015) %&gt;% group_by(month) %&gt;% 
+    summarise(average = mean(monthlyAverage)) %&gt;% ungroup()
+  # add a boolean column if the yearly average was hotter than the average over all years &amp; a new cumulative max
+  df$hotterThanAverage &lt;- df$yearlyAverage &gt; mean(average$average) &amp; df$yearlyAverage == cummax(df$yearlyAverage) 
+  
+  list(df, average)
+}</code></pre>
 </div>
-<div id="define-ggplot-theme-and-graphic-parameters" class="section level2">
-<h2>Define ggplot theme and graphic parameters</h2>
+<div id="define-all-ggplot-theme-and-graphic-parameters" class="section level2">
+<h2>Define all ggplot theme and graphic parameters</h2>
 <pre class="r"><code>library(animation)
 
 fontR &lt;- &quot;Open Sans&quot;
@@ -155,8 +158,10 @@ smoothAv.col &lt;- &quot;#8c8c8c&quot;
 
 hline.size &lt;- 0.5 
 line.text.size &lt;- 4
-title &lt;- &quot;Comment est-ce que la Suisse se réchauffe t-elle?&quot;
-subtitle &lt;- &quot;&quot;
+title &lt;- &quot;2015: année record de chaleur en Suisse&quot;
+footer &lt;- &quot;swissinfo.ch | source: MétéoSuisse&quot;
+monthly.average.label &lt;- &quot;Moyenne mensuelle 1864-2014&quot;
+overall.average.label &lt;- &quot;moyenne 1864-2014: &quot;
 
 ggtheme &lt;- function (yaxis = FALSE, base_family = fontR, base_family2 = fontSB,
     base_size = 11, axisColor = &quot;#7E8279&quot;) 
@@ -165,85 +170,76 @@ ggtheme &lt;- function (yaxis = FALSE, base_family = fontR, base_family2 = fontS
     choose_font(base_family2, FALSE)
     ret &lt;- theme_minimal(base_family = base_family, base_size = base_size) + 
         theme(
-            plot.title = element_text(hjust = 0.9, vjust = 5, 
-              size = rel(7), family = base_family2, color = &quot;#ebc7c7&quot;), 
-            axis.text = element_text(size = rel(1.3)), 
-            axis.title = element_text(size = rel(1.4), family = base_family2, 
-                color = axisColor), 
+            plot.title = element_text(hjust = -0.1, vjust = 0, 
+              size = rel(1.05), family = base_family, color = &quot;#4d4d4d&quot;), 
+            axis.text = element_text(size = rel(1.4)), 
+            axis.text.x = element_text(size = rel(1.1)), 
+            axis.title = element_blank(), 
             axis.line = element_line(linetype = &quot;solid&quot;, 
-                size = 0.5, color = axisColor, lineend = &quot;round&quot;),
+                size = 0.2, color = axisColor, lineend = &quot;round&quot;),
+            axis.line.y = element_blank(),
             axis.ticks = element_line(size = 0.5, color = axisColor), 
             axis.ticks.length = unit(2.5, &quot;mm&quot;), 
-            plot.margin = unit(c(0.3, 0.7, 0, 0), &quot;cm&quot;), 
+            plot.margin = unit(c(3, 7, 4, 3), &quot;mm&quot;), 
             panel.grid = element_blank()
           )
     ret
 }
 
-gridFormat &lt;- function(gg, top = title, bottom = &quot;Températures moyennes mesurées à Lugano | swissinfo.ch | source: MétéoSuisse&quot;) {
+gridFormat &lt;- function(gg, top = title, bottom = footer) {
     grid.arrange(gg, 
-      top = textGrob(top, x = 0.05, y = 0.1, vjust = 0.1, hjust = 0, 
-        gp = gpar(fontsize = 24, fontfamily = fontL, col = &quot;black&quot;)),
-      bottom = textGrob(bottom, x = 0.97, y = 1, vjust = 0, hjust = 1, 
-        gp = gpar(fontsize = 8, fontfamily = fontR, col = &quot;#b3b3b3&quot;))
+      top = textGrob(top, x = 0.05, y = 0.1, vjust = 0, hjust = 0, 
+        gp = gpar(fontsize = 26, fontfamily = fontL, col = &quot;black&quot;)),
+      bottom = textGrob(bottom, x = 0.98, y = 1, vjust = 1, hjust = 1, 
+        gp = gpar(fontsize = 9, fontfamily = fontR, col = &quot;#737373&quot;))
     )
-}</code></pre>
-</div>
-<div id="plot-test" class="section level2">
-<h2>Plot test</h2>
-<pre class="r"><code>## Get global plot settings
-y.range &lt;- range(df$monthlyAverage)
-yAverage.range &lt;- range(df$yearlyAverage)
+}
 
-# define colors
-ncol.breaks &lt;- 7
-cpal &lt;- colorRampPalette(colors = c(&quot;#69b8c9&quot;, &quot;#cc0000&quot;))
-df$colorGroup &lt;- cut(df$yearlyAverage, breaks = ncol.breaks)
-group.colors &lt;- structure(cpal(nlevels(df$colorGroup)), names = levels(df$colorGroup))
-
-#ggplot(data = df) + geom_line(aes(month, monthlyAverage, group = year, colour = yearlyAverage), size = 0.1, alpha = 0.8) 
-
-saveGIF({ 
-   # add average overall smoothed curved
+plot.intro &lt;- function(df, plot.title, average, y.range) {
+  # add average overall smoothed curved
   bg.p1 &lt;- ggplot() +  
       geom_smooth(data = average, aes(month, average, group = 1), 
-        size = 2.5, se = F, alpha = 0.2, color = smoothAv.col) +
-        ggtheme() + scale_y_continuous(limits = y.range, expand = c(0, 0), name = &quot;&quot;) + 
-        scale_x_discrete(expand = c(0, 0), name = &quot;&quot;) + ggtitle(&quot;&quot;)
-  bg.p2 &lt;- bg.p1 + geom_text(data = data.frame(x = 6.5, y = 23, 
-    label = &quot;Historical monthly average: 1864-2014&quot;), size = 6,
+        size = 3, se = F, alpha = 0.2, color = smoothAv.col) +
+        ggtheme() + 
+        scale_y_continuous(limits = y.range, expand = c(0, 0), name = &quot;&quot;, 
+          labels = function(x) paste0(x,'°'), breaks = pretty_breaks(6)) + 
+        scale_x_discrete(expand = c(0, 0), name = &quot;&quot;) + ggtitle(plot.title)
+  bg.p2 &lt;- bg.p1 + geom_text(data = data.frame(x = 6.5, y = y.range[2] - (diff(y.range) / 8), 
+    label = monthly.average.label), size = 6,
     aes(x = x,y = y,label = label), family = fontSB, hjust = 0.5, color = smoothAv.col)
-   gridFormat(bg.p2) 
-   bg.p3 &lt;- bg.p2 + geom_hline(yintercept = mean(average$average),
+
+  bg.p3 &lt;- bg.p2 + geom_hline(yintercept = mean(average$average),
         linetype = 2, alpha = 0.9, color = smoothAv.col) 
    gridFormat(bg.p3)
-   bg.p4 &lt;- bg.p3 + 
+  
+  bg.p4 &lt;- bg.p3 + 
     geom_text(data = data.frame(x = 1, y = mean(average$average), 
-      label = paste0(&quot; &quot;, &quot;average 1864-2014: &quot;, formatC(mean(average$average), digits = 3), &quot;°C&quot;)), 
+      label = paste0(&quot; &quot;, overall.average.label, formatC(mean(average$average), digits = 3), &quot;°&quot;)), 
       size = line.text.size, color = smoothAv.col,
       aes(x = x,y = y,label = label), family = fontR, hjust =  0, vjust = 1.4)
   
-   invisible(sapply(1:6, function(i) gridFormat(bg.p4, top = title)))
+   invisible(sapply(1:5, function(i) gridFormat(bg.p4, top = title)))
     
    bg.p &lt;- bg.p1 + 
     geom_hline(yintercept = mean(average$average),
       linetype = 2, alpha = 0.5, color = smoothAv.col) + 
     geom_text(data = data.frame(x = 1, y = mean(average$average), 
-      label = paste0(&quot; &quot;, &quot;average 1864-2014: &quot;, formatC(mean(average$average), digits = 3), &quot;°C&quot;)), 
+      label = paste0(&quot; &quot;, overall.average.label, formatC(mean(average$average), digits = 3), &quot;°&quot;)), 
       size = line.text.size, color = smoothAv.col, alpha = 0.9,
       aes(x = x,y = y,label = label), family = fontR, hjust =  0, vjust = 1.4)
   gridFormat(bg.p)
-  
-  ## 1. animation by year
-  sapply(unique(df$year), function(y) {
-    cat(&quot;\n&quot;, y)
+  bg.p
+}
+
+plot.year &lt;- function(df, y, bg.p, group.colors) {
+
     ddd &lt;- filter(df, year == y)
     # background : past years
     p1 &lt;- bg.p + 
       geom_line(data = df %&gt;% filter(year &lt; y, hotterThanAverage == FALSE),
-      aes(month, monthlyAverage, group = year, colour = colorGroup), size = 0.3, alpha = 0.4) + 
+      aes(month, monthlyAverage, group = year, colour = colorGroup), size = 0.2, alpha = 0.4) + 
       scale_color_manual(values = group.colors) + guides(color = &quot;none&quot;)
-      
+    
     # background : the last year hotter than the average &amp; previous max
     prior.max &lt;- df %&gt;% filter(year &lt; y, hotterThanAverage == TRUE) %&gt;% 
       group_by(year, colorGroup) %&gt;% summarise(max = last(yearlyAverage)) %&gt;% ungroup()
@@ -271,9 +267,12 @@ saveGIF({
       }
     }
     
+    y.range &lt;- ggplot_build(bg.p)$panel$ranges[[1]]$y.range
     main.p &lt;- p2 + 
-      geom_line(data = ddd, aes(month, monthlyAverage, group = year, colour = colorGroup), size = 1.1) + 
-      ggtitle(y) 
+      geom_line(data = ddd, aes(month, monthlyAverage, group = year, colour = colorGroup), size = 1.5) + 
+      # display year
+      annotate(&quot;text&quot;, x = 10.5, y = y.range[2] - y.range[2]/10, label = y,  
+        family = fontR, size = 20, color = group.colors[unlist(ddd[1,'colorGroup'])])
     
     if(unique(ddd$hotterThanAverage)) {
       main.p2 &lt;- main.p + 
@@ -289,313 +288,39 @@ saveGIF({
       main.p2 &lt;- main.p
     }
     gridFormat(main.p2)
-    if(y == 2015) sapply(1:10, function(i) gridFormat(main.p2))
-  })  
-}, interval = 0.4, movie.name = &quot;swissTemperature.gif&quot;, ani.width = 640, ani.height = 800)</code></pre>
-<pre><code>## 
-##  1864</code></pre>
-<pre><code>## 
-##  1865</code></pre>
-<pre><code>## 
-##  1866</code></pre>
-<pre><code>## 
-##  1867</code></pre>
-<pre><code>## 
-##  1868</code></pre>
-<pre><code>## 
-##  1869</code></pre>
-<pre><code>## 
-##  1870</code></pre>
-<pre><code>## 
-##  1871</code></pre>
-<pre><code>## 
-##  1872</code></pre>
-<pre><code>## 
-##  1873</code></pre>
-<pre><code>## 
-##  1874</code></pre>
-<pre><code>## 
-##  1875</code></pre>
-<pre><code>## 
-##  1876</code></pre>
-<pre><code>## 
-##  1877</code></pre>
-<pre><code>## 
-##  1878</code></pre>
-<pre><code>## 
-##  1879</code></pre>
-<pre><code>## 
-##  1880</code></pre>
-<pre><code>## 
-##  1881</code></pre>
-<pre><code>## 
-##  1882</code></pre>
-<pre><code>## 
-##  1883</code></pre>
-<pre><code>## 
-##  1884</code></pre>
-<pre><code>## 
-##  1885</code></pre>
-<pre><code>## 
-##  1886</code></pre>
-<pre><code>## 
-##  1887</code></pre>
-<pre><code>## 
-##  1888</code></pre>
-<pre><code>## 
-##  1889</code></pre>
-<pre><code>## 
-##  1890</code></pre>
-<pre><code>## 
-##  1891</code></pre>
-<pre><code>## 
-##  1892</code></pre>
-<pre><code>## 
-##  1893</code></pre>
-<pre><code>## 
-##  1894</code></pre>
-<pre><code>## 
-##  1895</code></pre>
-<pre><code>## 
-##  1896</code></pre>
-<pre><code>## 
-##  1897</code></pre>
-<pre><code>## 
-##  1898</code></pre>
-<pre><code>## 
-##  1899</code></pre>
-<pre><code>## 
-##  1900</code></pre>
-<pre><code>## 
-##  1901</code></pre>
-<pre><code>## 
-##  1902</code></pre>
-<pre><code>## 
-##  1903</code></pre>
-<pre><code>## 
-##  1904</code></pre>
-<pre><code>## 
-##  1905</code></pre>
-<pre><code>## 
-##  1906</code></pre>
-<pre><code>## 
-##  1907</code></pre>
-<pre><code>## 
-##  1908</code></pre>
-<pre><code>## 
-##  1909</code></pre>
-<pre><code>## 
-##  1910</code></pre>
-<pre><code>## 
-##  1911</code></pre>
-<pre><code>## 
-##  1912</code></pre>
-<pre><code>## 
-##  1913</code></pre>
-<pre><code>## 
-##  1914</code></pre>
-<pre><code>## 
-##  1915</code></pre>
-<pre><code>## 
-##  1916</code></pre>
-<pre><code>## 
-##  1917</code></pre>
-<pre><code>## 
-##  1918</code></pre>
-<pre><code>## 
-##  1919</code></pre>
-<pre><code>## 
-##  1920</code></pre>
-<pre><code>## 
-##  1921</code></pre>
-<pre><code>## 
-##  1922</code></pre>
-<pre><code>## 
-##  1923</code></pre>
-<pre><code>## 
-##  1924</code></pre>
-<pre><code>## 
-##  1925</code></pre>
-<pre><code>## 
-##  1926</code></pre>
-<pre><code>## 
-##  1927</code></pre>
-<pre><code>## 
-##  1928</code></pre>
-<pre><code>## 
-##  1929</code></pre>
-<pre><code>## 
-##  1930</code></pre>
-<pre><code>## 
-##  1931</code></pre>
-<pre><code>## 
-##  1932</code></pre>
-<pre><code>## 
-##  1933</code></pre>
-<pre><code>## 
-##  1934</code></pre>
-<pre><code>## 
-##  1935</code></pre>
-<pre><code>## 
-##  1936</code></pre>
-<pre><code>## 
-##  1937</code></pre>
-<pre><code>## 
-##  1938</code></pre>
-<pre><code>## 
-##  1939</code></pre>
-<pre><code>## 
-##  1940</code></pre>
-<pre><code>## 
-##  1941</code></pre>
-<pre><code>## 
-##  1942</code></pre>
-<pre><code>## 
-##  1943</code></pre>
-<pre><code>## 
-##  1944</code></pre>
-<pre><code>## 
-##  1945</code></pre>
-<pre><code>## 
-##  1946</code></pre>
-<pre><code>## 
-##  1947</code></pre>
-<pre><code>## 
-##  1948</code></pre>
-<pre><code>## 
-##  1949</code></pre>
-<pre><code>## 
-##  1950</code></pre>
-<pre><code>## 
-##  1951</code></pre>
-<pre><code>## 
-##  1952</code></pre>
-<pre><code>## 
-##  1953</code></pre>
-<pre><code>## 
-##  1954</code></pre>
-<pre><code>## 
-##  1955</code></pre>
-<pre><code>## 
-##  1956</code></pre>
-<pre><code>## 
-##  1957</code></pre>
-<pre><code>## 
-##  1958</code></pre>
-<pre><code>## 
-##  1959</code></pre>
-<pre><code>## 
-##  1960</code></pre>
-<pre><code>## 
-##  1961</code></pre>
-<pre><code>## 
-##  1962</code></pre>
-<pre><code>## 
-##  1963</code></pre>
-<pre><code>## 
-##  1964</code></pre>
-<pre><code>## 
-##  1965</code></pre>
-<pre><code>## 
-##  1966</code></pre>
-<pre><code>## 
-##  1967</code></pre>
-<pre><code>## 
-##  1968</code></pre>
-<pre><code>## 
-##  1969</code></pre>
-<pre><code>## 
-##  1970</code></pre>
-<pre><code>## 
-##  1971</code></pre>
-<pre><code>## 
-##  1972</code></pre>
-<pre><code>## 
-##  1973</code></pre>
-<pre><code>## 
-##  1974</code></pre>
-<pre><code>## 
-##  1975</code></pre>
-<pre><code>## 
-##  1976</code></pre>
-<pre><code>## 
-##  1977</code></pre>
-<pre><code>## 
-##  1978</code></pre>
-<pre><code>## 
-##  1979</code></pre>
-<pre><code>## 
-##  1980</code></pre>
-<pre><code>## 
-##  1981</code></pre>
-<pre><code>## 
-##  1982</code></pre>
-<pre><code>## 
-##  1983</code></pre>
-<pre><code>## 
-##  1984</code></pre>
-<pre><code>## 
-##  1985</code></pre>
-<pre><code>## 
-##  1986</code></pre>
-<pre><code>## 
-##  1987</code></pre>
-<pre><code>## 
-##  1988</code></pre>
-<pre><code>## 
-##  1989</code></pre>
-<pre><code>## 
-##  1990</code></pre>
-<pre><code>## 
-##  1991</code></pre>
-<pre><code>## 
-##  1992</code></pre>
-<pre><code>## 
-##  1993</code></pre>
-<pre><code>## 
-##  1994</code></pre>
-<pre><code>## 
-##  1995</code></pre>
-<pre><code>## 
-##  1996</code></pre>
-<pre><code>## 
-##  1997</code></pre>
-<pre><code>## 
-##  1998</code></pre>
-<pre><code>## 
-##  1999</code></pre>
-<pre><code>## 
-##  2000</code></pre>
-<pre><code>## 
-##  2001</code></pre>
-<pre><code>## 
-##  2002</code></pre>
-<pre><code>## 
-##  2003</code></pre>
-<pre><code>## 
-##  2004</code></pre>
-<pre><code>## 
-##  2005</code></pre>
-<pre><code>## 
-##  2006</code></pre>
-<pre><code>## 
-##  2007</code></pre>
-<pre><code>## 
-##  2008</code></pre>
-<pre><code>## 
-##  2009</code></pre>
-<pre><code>## 
-##  2010</code></pre>
-<pre><code>## 
-##  2011</code></pre>
-<pre><code>## 
-##  2012</code></pre>
-<pre><code>## 
-##  2013</code></pre>
-<pre><code>## 
-##  2014</code></pre>
-<pre><code>## 
-##  2015</code></pre>
+    if(y == 2015) sapply(1:12, function(i) gridFormat(main.p2))  
+}
+
+render.gif &lt;- function(data, stations, plot.title) {
+  tmp &lt;- shapeData(data, stations)
+  df &lt;- tmp[[1]]
+  average &lt;- tmp[[2]]
+  
+  ## Get global plot settings
+  y.range &lt;- range(df$monthlyAverage)
+  y.range &lt;- c(floor(y.range[1]), ceiling(y.range[2]))
+  
+  # define colors
+  ncol.breaks &lt;- 7
+  cpal &lt;- colorRampPalette(colors = c(&quot;#69b8c9&quot;, &quot;#cc0000&quot;))
+  df$colorGroup &lt;- cut(df$yearlyAverage, breaks = ncol.breaks)
+  group.colors &lt;- structure(cpal(nlevels(df$colorGroup)), names = levels(df$colorGroup))  
+  
+
+  saveGIF({
+    bg.p &lt;- plot.intro(df, plot.title, average, y.range)
+    sapply(unique(df$year), function(y) plot.year(df, y, bg.p, group.colors))
+  }, interval = 0.4, movie.name = paste0(&quot;swissTemperature_&quot;, paste(stations, collapse =&quot;_&quot;), &quot;.gif&quot;), ani.width = 640, ani.height = 720)
+}</code></pre>
+</div>
+<div id="create-gif" class="section level2">
+<h2>Create GIF</h2>
+<pre class="r"><code>#render.gif(data, stations = &quot;LUG&quot;, plot.title = &quot;Températures moyennes mesurées à Lugano (sud de la Suisse)&quot;)
+# render.gif(data, stations = c(&quot;SAE&quot;), 
+#   plot.title = &quot;Température moyenne mesurée à Säntis (2502m, nord des Alpes)&quot;)
+
+render.gif(data, stations = c(&quot;SAE&quot;, &quot;ENG&quot;), 
+  plot.title = &quot;Température moyenne mesurée en altitude, à Säntis (2502m) et Engelberg (1036m)\n&quot;)</code></pre>
 <pre><code>## Executing: 
 ## 'convert' -loop 0 -delay 40 Rplot1.png Rplot2.png Rplot3.png
 ##     Rplot4.png Rplot5.png Rplot6.png Rplot7.png Rplot8.png
@@ -635,9 +360,24 @@ saveGIF({
 ##     Rplot159.png Rplot160.png Rplot161.png Rplot162.png
 ##     Rplot163.png Rplot164.png Rplot165.png Rplot166.png
 ##     Rplot167.png Rplot168.png Rplot169.png Rplot170.png
-##     Rplot171.png 'swissTemperature.gif'
-## Output at: swissTemperature.gif</code></pre>
+##     Rplot171.png 'swissTemperature_SAE_ENG.gif'
+## Output at: swissTemperature_SAE_ENG.gif</code></pre>
 <pre><code>## [1] TRUE</code></pre>
+</div>
+<div id="compute-the-average-annual-temperature-and-its-deviation-from-1961-1990-average" class="section level2">
+<h2>Compute the average annual temperature and its deviation from 1961-1990 average</h2>
+<pre class="r"><code>yearly.average &lt;- data %&gt;% group_by(year) %&gt;% summarise(yearlyMean = mean(temp, na.rm = T)) %&gt;% ungroup()
+average &lt;- data %&gt;% filter(year &gt;= 1961, year &lt;= 1990) %&gt;% 
+  summarise(average = mean(temp, na.rm = T)) %&gt;% ungroup() %&gt;% unlist(use.names = F)
+
+yearly.average$ecart &lt;- yearly.average$yearlyMean - average
+write.csv(yearly.average, file = &quot;input/ecartTemperatureMoyennes_normes_1961_1990.csv&quot;, row.names = F)
+
+average &lt;- data %&gt;% filter(year &gt;= 1981, year &lt;= 2010) %&gt;% 
+  summarise(average = mean(temp, na.rm = T)) %&gt;% ungroup() %&gt;% unlist(use.names = F)
+
+yearly.average$ecart &lt;- yearly.average$yearlyMean - average
+write.csv(yearly.average, file = &quot;input/ecartTemperatureMoyennes_normes_1981_2010.csv&quot;, row.names = F)</code></pre>
 </div>
 
 
