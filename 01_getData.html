@@ -81,7 +81,7 @@ img {
 <div id="settings" class="section level3">
 <h3>Settings</h3>
 <pre class="r"><code>downloadData &lt;- FALSE
-stations &lt;- &quot;LUG&quot; #c('BAS', 'BER', 'GVE')</code></pre>
+translation.file &lt;- &quot;input/translations_temperatureDataVis.csv&quot;</code></pre>
 </div>
 <div id="get-data-of-each-stations" class="section level3">
 <h3>Get data of each stations</h3>
@@ -121,7 +121,10 @@ data &lt;- do.call(rbind, lapply(1:length(tables), function(i) {
   station &lt;- names(tables)[i]
   cbind(tables[[i]][,1:3], station = station)
 }))
-colnames(data)[1:3] &lt;- c('year', 'month', 'temp')</code></pre>
+colnames(data)[1:3] &lt;- c('year', 'month', 'temp')
+
+# read translation file
+txt &lt;- read.csv(translation.file, row.names = 1, stringsAsFactors = F)</code></pre>
 </div>
 </div>
 <div id="shape-the-data" class="section level2">
@@ -151,17 +154,12 @@ colnames(data)[1:3] &lt;- c('year', 'month', 'temp')</code></pre>
 <h2>Define all ggplot theme and graphic parameters</h2>
 <pre class="r"><code>library(animation)
 
+smoothAv.col &lt;- &quot;#8c8c8c&quot;
+hline.size &lt;- 0.5 
+line.text.size &lt;- 4
 fontR &lt;- &quot;Open Sans&quot;
 fontSB &lt;- &quot;Open Sans Semibold&quot;
 fontL &lt;- &quot;Open Sans Light&quot;
-smoothAv.col &lt;- &quot;#8c8c8c&quot;
-
-hline.size &lt;- 0.5 
-line.text.size &lt;- 4
-title &lt;- &quot;2015: année record de chaleur en Suisse&quot;
-footer &lt;- &quot;swissinfo.ch | source: MétéoSuisse&quot;
-monthly.average.label &lt;- &quot;Moyenne mensuelle 1864-2014&quot;
-overall.average.label &lt;- &quot;moyenne 1864-2014: &quot;
 
 ggtheme &lt;- function (yaxis = FALSE, base_family = fontR, base_family2 = fontSB,
     base_size = 11, axisColor = &quot;#7E8279&quot;) 
@@ -186,16 +184,7 @@ ggtheme &lt;- function (yaxis = FALSE, base_family = fontR, base_family2 = fontS
     ret
 }
 
-gridFormat &lt;- function(gg, top = title, bottom = footer) {
-    grid.arrange(gg, 
-      top = textGrob(top, x = 0.05, y = 0.1, vjust = 0, hjust = 0, 
-        gp = gpar(fontsize = 26, fontfamily = fontL, col = &quot;black&quot;)),
-      bottom = textGrob(bottom, x = 0.98, y = 1, vjust = 1, hjust = 1, 
-        gp = gpar(fontsize = 9, fontfamily = fontR, col = &quot;#737373&quot;))
-    )
-}
-
-plot.intro &lt;- function(df, plot.title, average, y.range) {
+plot.intro &lt;- function(df, plot.title, average, y.range, monthly.average.label, overall.average.label) {
   # add average overall smoothed curved
   bg.p1 &lt;- ggplot() +  
       geom_smooth(data = average, aes(month, average, group = 1), 
@@ -214,17 +203,17 @@ plot.intro &lt;- function(df, plot.title, average, y.range) {
   
   bg.p4 &lt;- bg.p3 + 
     geom_text(data = data.frame(x = 1, y = mean(average$average), 
-      label = paste0(&quot; &quot;, overall.average.label, formatC(mean(average$average), digits = 3), &quot;°&quot;)), 
+      label = paste0(&quot; &quot;, overall.average.label, &quot;: &quot;, formatC(mean(average$average), digits = 3), &quot;°&quot;)), 
       size = line.text.size, color = smoothAv.col,
       aes(x = x,y = y,label = label), family = fontR, hjust =  0, vjust = 1.4)
   
-   invisible(sapply(1:5, function(i) gridFormat(bg.p4, top = title)))
+   invisible(sapply(1:5, function(i) gridFormat(bg.p4)))
     
    bg.p &lt;- bg.p1 + 
     geom_hline(yintercept = mean(average$average),
       linetype = 2, alpha = 0.5, color = smoothAv.col) + 
     geom_text(data = data.frame(x = 1, y = mean(average$average), 
-      label = paste0(&quot; &quot;, overall.average.label, formatC(mean(average$average), digits = 3), &quot;°&quot;)), 
+      label = paste0(&quot; &quot;, overall.average.label, &quot;: &quot;, formatC(mean(average$average), digits = 3), &quot;°&quot;)), 
       size = line.text.size, color = smoothAv.col, alpha = 0.9,
       aes(x = x,y = y,label = label), family = fontR, hjust =  0, vjust = 1.4)
   gridFormat(bg.p)
@@ -291,7 +280,10 @@ plot.year &lt;- function(df, y, bg.p, group.colors) {
     if(y == 2015) sapply(1:12, function(i) gridFormat(main.p2))  
 }
 
-render.gif &lt;- function(data, stations, plot.title) {
+render.gif &lt;- function(
+  data, stations, plot.title, monthly.average.label, overall.average.label, output.file = paste0(&quot;swissTemperature_&quot;, paste(stations, collapse =&quot;_&quot;), &quot;.gif&quot;)
+  ) {
+  
   tmp &lt;- shapeData(data, stations)
   df &lt;- tmp[[1]]
   average &lt;- tmp[[2]]
@@ -306,21 +298,38 @@ render.gif &lt;- function(data, stations, plot.title) {
   df$colorGroup &lt;- cut(df$yearlyAverage, breaks = ncol.breaks)
   group.colors &lt;- structure(cpal(nlevels(df$colorGroup)), names = levels(df$colorGroup))  
   
-
   saveGIF({
-    bg.p &lt;- plot.intro(df, plot.title, average, y.range)
+    bg.p &lt;- plot.intro(df, plot.title, average, y.range, monthly.average.label, overall.average.label)
     sapply(unique(df$year), function(y) plot.year(df, y, bg.p, group.colors))
-  }, interval = 0.4, movie.name = paste0(&quot;swissTemperature_&quot;, paste(stations, collapse =&quot;_&quot;), &quot;.gif&quot;), ani.width = 640, ani.height = 720)
+  }, interval = 0.4, movie.name = output.file, ani.width = 640, ani.height = 720)
+  
 }</code></pre>
 </div>
 <div id="create-gif" class="section level2">
 <h2>Create GIF</h2>
-<pre class="r"><code>#render.gif(data, stations = &quot;LUG&quot;, plot.title = &quot;Températures moyennes mesurées à Lugano (sud de la Suisse)&quot;)
-# render.gif(data, stations = c(&quot;SAE&quot;), 
-#   plot.title = &quot;Température moyenne mesurée à Säntis (2502m, nord des Alpes)&quot;)
+<pre class="r"><code># render.gif(data, stations = c(&quot;SAE&quot;, &quot;ENG&quot;), 
+#   plot.title = &quot;Température moyenne mesurée en altitude, à Säntis (2502m) et Engelberg (1036m)\n&quot;)
 
-render.gif(data, stations = c(&quot;SAE&quot;, &quot;ENG&quot;), 
-  plot.title = &quot;Température moyenne mesurée en altitude, à Säntis (2502m) et Engelberg (1036m)\n&quot;)</code></pre>
+#colnames(txt)
+for(lang in 'fr') {
+  
+  cat(&quot;\n&quot;, lang)
+  stations &lt;- c(&quot;SAE&quot;, &quot;ENG&quot;)
+  gridFormat &lt;- function(gg, top = txt['title', lang], bottom = txt['footer', lang]) {
+    grid.arrange(gg, 
+      top = textGrob(top, x = 0.05, y = 0.1, vjust = 0, hjust = 0, 
+      gp = gpar(fontsize = 26, fontfamily = fontL, col = &quot;black&quot;)),
+      bottom = textGrob(bottom, x = 0.98, y = 1, vjust = 1, hjust = 1, 
+      gp = gpar(fontsize = 9, fontfamily = fontR, col = &quot;#737373&quot;))
+    )
+  }
+  
+  render.gif(data, stations = stations, plot.title = paste0(txt['subtitle', lang], &quot;\n&quot;), 
+    monthly.average.label = txt['monthly.average', lang], overall.average.label = txt['overall.average', lang],
+    output.file = paste0(&quot;swissTemperature_&quot;, paste(stations, collapse =&quot;_&quot;), &quot;_&quot;, lang, &quot;.gif&quot;))
+}</code></pre>
+<pre><code>## 
+##  fr</code></pre>
 <pre><code>## Executing: 
 ## 'convert' -loop 0 -delay 40 Rplot1.png Rplot2.png Rplot3.png
 ##     Rplot4.png Rplot5.png Rplot6.png Rplot7.png Rplot8.png
@@ -360,9 +369,8 @@ render.gif(data, stations = c(&quot;SAE&quot;, &quot;ENG&quot;),
 ##     Rplot159.png Rplot160.png Rplot161.png Rplot162.png
 ##     Rplot163.png Rplot164.png Rplot165.png Rplot166.png
 ##     Rplot167.png Rplot168.png Rplot169.png Rplot170.png
-##     Rplot171.png 'swissTemperature_SAE_ENG.gif'
-## Output at: swissTemperature_SAE_ENG.gif</code></pre>
-<pre><code>## [1] TRUE</code></pre>
+##     Rplot171.png 'swissTemperature_SAE_ENG_fr.gif'
+## Output at: swissTemperature_SAE_ENG_fr.gif</code></pre>
 </div>
 <div id="compute-the-average-annual-temperature-and-its-deviation-from-1961-1990-average" class="section level2">
 <h2>Compute the average annual temperature and its deviation from 1961-1990 average</h2>
