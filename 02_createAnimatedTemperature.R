@@ -168,7 +168,8 @@ plot.year <- function(df, y, bg.p, group.colors, fontv) {
 
 render.gif <- function(
   data, stations, plot.title, monthly.average.label, fontv,
-  overall.average.label, output.file = paste0("swissTemperature_", paste(stations, collapse ="_"), ".gif")
+  overall.average.label, output.file = paste0("swissTemperature_", paste(stations, collapse ="_"), ".gif"),
+  createMovieTeaser = FALSE
 ) {
 
   tmp <- shapeData(data, stations)
@@ -185,15 +186,24 @@ render.gif <- function(
   df$colorGroup <- cut(df$yearlyAverage, breaks = ncol.breaks)
   group.colors <- structure(cpal(nlevels(df$colorGroup)), names = levels(df$colorGroup))
 
-  saveGIF({
-    bg.p <- plot.intro(df, plot.title, average, y.range, monthly.average.label, overall.average.label, fontv)
-    sapply(unique(df$year), function(y) plot.year(df, y, bg.p, group.colors, fontv))
-  }, interval = 0.4, movie.name = output.file, ani.width = 640, ani.height = 720)
+  if(!createMovieTeaser) {
+    saveGIF({
+      bg.p <- plot.intro(df, plot.title, average, y.range, monthly.average.label, overall.average.label, fontv)
+      sapply(unique(df$year), function(y) plot.year(df, y, bg.p, group.colors, fontv))
+    }, interval = 0.4, movie.name = output.file, ani.width = 640, ani.height = 720)
+  } else {
+    saveVideo({
+      bg.p <- plot.intro(df, plot.title, average, y.range, monthly.average.label, overall.average.label, fontv)
+      sapply(unique(df$year), function(y) plot.year(df, y, bg.p, group.colors, fontv))
+    }, interval = 0.15, video.name = gsub("\\.gif$", "_teaser.mp4", output.file), ani.width = 640, ani.height = 720)
+  }
+
 
 }
 
 ## Create GIF
-for(lang in colnames(txt)) {
+#for(lang in colnames(txt)) {
+for(lang in c('de')) {
 
   cat("\n", lang)
   stations <- c("SAE", "ENG")
@@ -205,7 +215,7 @@ for(lang in colnames(txt)) {
 
   gridFormat <- function(gg, top = txt['title', lang], bottom = txt['footer', lang]) {
     grid.arrange(gg,
-      top = textGrob(top, x = 0.05, y = 0.1, vjust = 0, hjust = 0,
+      top = textGrob(top, x = 0.074, y = 0.1, vjust = 0, hjust = 0,
         gp = gpar(fontsize = 26, fontfamily = fontv[3], col = "black")),
       bottom = textGrob(bottom, x = 0.98, y = 1, vjust = 1, hjust = 1,
         gp = gpar(fontsize = 9, fontfamily = fontv[1], col = "#737373"))
@@ -219,8 +229,8 @@ for(lang in colnames(txt)) {
     choose_font(base_family2, FALSE)
     ret <- theme_minimal(base_family = base_family, base_size = base_size) +
       theme(
-        plot.title = element_text(hjust = -0.1, vjust = 0,
-                                  size = rel(1.05), family = base_family, color = "#4d4d4d"),
+        plot.title = element_text(hjust = 0, vjust = 0,
+          size = rel(1.05), family = base_family, color = "#4d4d4d"),
         axis.text = element_text(size = rel(1.4)),
         axis.text.x = element_text(size = rel(1.1)),
         axis.title = element_blank(),
@@ -238,6 +248,6 @@ for(lang in colnames(txt)) {
   render.gif(data, stations = stations, plot.title = paste0(txt['subtitle', lang], "\n"),
     monthly.average.label = txt['monthly.average', lang], overall.average.label = txt['overall.average', lang],
     fontv,
-    output.file = paste0("swissTemperature_", paste(stations, collapse ="_"), "_", lang, ".gif"))
+    output.file = paste0("swissTemperature_", paste(stations, collapse ="_"), "_", lang, ".gif"), createMovieTeaser = F)
 }
 
