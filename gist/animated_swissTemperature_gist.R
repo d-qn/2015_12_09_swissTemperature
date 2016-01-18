@@ -1,3 +1,5 @@
+# Live example output: http://www.swissinfo.ch/eng/climate_how-hot-was-it-in-2015-/41895874
+
 library(dplyr)
 library(tidyr)
 library(grid) # for the graphic header & footer
