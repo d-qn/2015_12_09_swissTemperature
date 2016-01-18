@@ -1,5 +1,7 @@
-### Raw data
+### raw data
 
-* Use the data from the different stations: [meteoSuisse](http://www.meteosuisse.admin.ch/home/climat/passe/donnees-mensuelles-homogeneisees.html?region=Tableau)
-* Check computed average with [their annual data](http://www.meteosuisse.admin.ch/product/output/climate-data/homogenous-monthly-data-processing/data/homog_mo_schweiz.txt)!!
+* Swiss meterological stations: [meteoSuisse](http://www.meteosuisse.admin.ch/home/climat/passe/donnees-mensuelles-homogeneisees.html?region=Tableau)
+
+
+Animated graphic inspired by the great Bloomberg's interactive: http://www.bloomberg.com/news/features/2015-11-18/heat-records-shatter-as-a-monster-el-nino-gathers-strength
 
