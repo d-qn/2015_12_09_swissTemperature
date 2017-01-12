@@ -172,7 +172,7 @@ plot_bg &lt;- function(dd,
     geom_line(aes_string(x = 'month', y = var, group= 'year', colour = 'color'), size = 0.15, alpha = 0.7) +
     scale_colour_identity() +
     scale_x_discrete(name = &quot;&quot;, expand = c(0, 0.45)) +
-    scale_y_continuous(name = &quot;&quot;, expand = c(0.01, 0), labels = function(x) paste0(x,'°'), limits = ylim) +
+    scale_y_continuous(name = &quot;&quot;, expand = c(0.01, 0), labels = function(x) paste0(x,'°'), limits = ylim, breaks = scales::pretty_breaks(n = 5)) +
     geom_hline(yintercept = 0, colour = &quot;#ffffff&quot;, alpha = 0.5, size = 0.3) +
     labs(title = title, subtitle = subtitle, caption = source)
 }
@@ -220,7 +220,7 @@ renderPlot &lt;- function(
     gp2 &lt;- gp +
       plot_fg(filter(dat, year == syr)) +
       annotate(
-        &quot;text&quot;, x = 6.5, y = -4, label = syr, 
+        &quot;text&quot;, x = 6.5, y = -4.7, label = syr, 
         colour = filter(ddd, year == syr ) %&gt;% select(color) %&gt;% unlist(use.names = F) %&gt;% head(1),
         family = title_family, size = 35, hjust = 0.5
       )
@@ -283,10 +283,6 @@ for (lang in colnames(txt)) {
 ##     Rplot44.png Rplot45.png Rplot46.png Rplot47.png Rplot48.png
 ##     Rplot49.png 'swissTemperature_2000_2016_640_EN_dev.gif'</code></pre>
 <pre><code>## Output at: swissTemperature_2000_2016_640_EN_dev.gif</code></pre>
-<pre><code>## Executing: 'ffmpeg' -y -r 6.66666666666667 -i Rplot%d.png -pix_fmt yuv420p swissTemperature_2000_2016_640_EN_dev.mp4</code></pre>
-<pre><code>## 
-## 
-## Video has been created at: /Users/nguyendu/swissinfo/2016_01_03_swissTemperature/swissTemperature_2000_2016_640_EN_dev.mp4</code></pre>
 </div>
 
 
