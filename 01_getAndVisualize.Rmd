@@ -1,0 +1,270 @@
+---
+title: "Get and plot Swiss average temperature"
+author: "Duc-Quang Nguyen | swissinfo.ch"
+date: " 2016"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: simplex
+---
+
+
+## Graphic 
+
+* [Spiralling global temperatures](https://www.climate-lab-book.ac.uk/2016/spiralling-global-temperatures/)
+* [How to produce an animated gif of rise in global temperature in R](http://www.opiniomics.org/how-to-produce-an-animated-gif-of-rise-in-global-temperature-in-r/)
+
+## Data
+* [data](http://www.meteosuisse.admin.ch/home/climat/actuel/tendences-climatiques/donnees-de-la-temperature-moyenne-suisse-depuis-1864.html)
+* [Method for the data](http://www.meteosuisse.admin.ch/content/dam/meteoswiss/fr/Klima/Gegenwart/doc/ProdDoc_CHTM_v1.0_fr.pdf)
+
+
+
+```{r setup, include=FALSE}
+downloadData <- F
+dataExportDW <- F
+
+generateVideo <- T
+dev <- F
+
+yStart.avg <- 1981
+yEnd.avg <- 2010
+g.width <- 640
+var <- 'value'
+
+translation.file <- "input/how hot was 2016- - Sheet1.csv"
+
+input.url <- 'http://www.meteosuisse.admin.ch/product/input/climate-data/swissmean/10.18751-Climate-Timeseries-CHTM-1.0-swiss.txt'
+
+months <- structure(1:12, names = c('jan', 'feb',	'mar',	'apr',	'may',	'jun',	'jul',	'aug',	'sep',	'oct',	'nov',	'dec'))
+
+library(readr)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+library(countrycode)
+library(ggplot2)
+library(scales)
+library(swiMap)
+library(swiTheme)
+library(animation)
+
+require(viridis)
+```
+
+
+```{r load data, include = F}
+txt <- loadTranslation(translation.file)
+
+rawData.file <- paste0("data/", basename(input.url))
+if(downloadData) {
+  download.file(input.url, rawData.file)  
+}
+
+# Read each txt file and save it as CSV
+header <- read.table(rawData.file, skip = 13, stringsAsFactors = FALSE, nrows = 1) %>% unlist(use.names = F)
+table <- read.table(rawData.file, skip = 14, stringsAsFactors = FALSE)
+colnames(table) <- header
+
+tb <- table %>% select(-djf, -mam, -jja, -son, -winter, -summer, -year)
+tb %<>% gather(month, value, -time) %>% rename(year = time) %>%
+  arrange (year)
+tb$mm <- months[match(tb$month, names(months))]
+
+yr <- table %>% select(time, year)
+colnames(yr) <- c('year', 'y.average')
+# should look the same to: http://www.meteosuisse.admin.ch/home/climat/actuel/tendences-climatiques/la-temperature-moyenne-suisse.html
+
+# compute the average for each month over all years
+monthly.average <- tb %>% filter(year >= yStart.avg, year <= yEnd.avg) %>% group_by(mm) %>% 
+  summarise(average = mean(value, na.rm = T)) %>% ungroup() %>% as.data.frame()
+
+yearly.average <-  yr %>% filter(year >= yStart.avg, year <= yEnd.avg) %>% 
+  summarise(o.average = mean(y.average, na.rm = T)) %>% ungroup() %>% unlist()
+
+tb %<>% group_by(year) %>% mutate(mavg = mean(value, na.rm = T)) %>% ungroup()
+tb$month <- factor(tb$month, levels=names(months))
+
+tb <- left_join(tb, monthly.average)
+tb$dev <- tb$value - tb$average
+tb <- left_join(tb, yr)
+tb$mdev <- tb$value - yearly.average
+tb$mavg - yearly.average
+
+col.brk <- seq(min(tb$y.average, na.rm = T) - 0.001, max(tb$y.average, na.rm = T) + 0.001, 
+               length.out = length(unique(tb$year)))
+colours <- viridis_pal(option = "C")(length(col.brk))
+tb$color <- colours[as.numeric(cut(tb$y.average, breaks = col.brk))]
+
+```
+
+```{r plot helpers}
+
+if(dev) {
+  # ggplot(tb) + 
+  #   geom_line(aes_string(x = 'month', y = var, group= 'year', colour = 'color'), size = 0.1, alpha = 0.9) +
+  #   geom_line(data = monthly.average, aes_string( x = 'mm', y = 'average', group= 1), colour = 'black', size = 1.5, alpha = 0.5) + 
+  #   scale_colour_identity() +
+  #   scale_x_discrete(name = "", expand = c(0, 0.3)) +
+  #   scale_y_continuous(name = "", expand = c(0.01, 0), labels = function(x) paste0(x,'°')) +
+  #   swi_theme(base_size = 19) + 
+  #   theme(
+  #     plot.margin=unit(c(0.3, 0, 0.3, -2), "mm"),
+  #     axis.ticks.x = element_line(size=0.4)
+  #   )  
+}
+
+top.years <- yr %>% arrange(desc(y.average)) %>% head(10) %>% select(year) %>% unlist(use.names = F)
+
+## helpers 
+
+plot_bg <- function(dd, 
+                    ylim, 
+                    title = "Average temperature in Switzerland 1864-2016", 
+                    subtitle = paste0("In °C. The dotted grey curve is the ", yStart.avg, '-', yEnd.avg, 
+                                      " monthly average\nThe animation slows down for the 10 hottest years"), 
+                    source = "source: MeteoSwiss | @duc_qn | swissinfo.ch") {
+  ggplot(dd) + 
+    geom_line(data = monthly.average, aes_string( x = 'mm', y = 'average', group= 1), colour = '#efe9e0', size = 1.5, alpha = 0.85, linetype = "dotted") + 
+    geom_line(aes_string(x = 'month', y = var, group= 'year', colour = 'color'), size = 0.15, alpha = 0.7) +
+    scale_colour_identity() +
+    scale_x_discrete(name = "", expand = c(0, 0.45)) +
+    scale_y_continuous(name = "", expand = c(0.01, 0), labels = function(x) paste0(x,'°'), limits = ylim) +
+    geom_hline(yintercept = 0, colour = "#ffffff", alpha = 0.5, size = 0.3) +
+    labs(title = title, subtitle = subtitle, caption = source)
+}
+
+plot_fg <- function(ee) {
+    geom_line(data = ee, aes_string(x = 'month', y = var, group= 'year', colour = 'color'), size = 1.7, alpha = 1) 
+}
+
+plot_layout <- function(base_family, title_family) {
+    swi_theme(base_size = 26, base_family = base_family, title_family = title_family) + 
+    theme(
+      plot.margin=unit(c(4, 1.5, 1.6, -5.5), "mm"),
+      axis.ticks.x = element_line(size=0.7, colour = "#e5dbcd"),
+      # black theme
+      plot.background = element_rect(fill = "#333333", size = 0, color = NA),
+      panel.grid.major.y=element_line(color="#e5dbcd", linetype="dotted", size=0.15),
+      axis.line.x=element_line(color="#e5dbcd", size=0.15),
+      axis.title = element_text(colour = "#f7f5ed", size = 15),
+      axis.text = element_text(colour = "#eee7dd"),
+      axis.text.x = element_text(colour = "#ffffff"),
+      plot.title = element_text(size = 29, colour = "#ffffff"),
+      plot.subtitle = element_text(size = 19, colour = "#eee7dd"),
+      plot.caption = element_text(size = 13, colour = "#f7f5ed")
+    )  
+}
+
+# syr <- 1900
+# gp <- plot_bg(filter(tb, year < syr), ylim = range(tb[,var], na.rm = T)) +
+#   plot_layout( base_family = "OpenSans-CondensedLight", title_family = "OpenSans-CondensedBold")
+# gp2 <- gp +
+#   plot_fg(filter(tb, year == syr)) +
+#   annotate(
+#     "text", x = 6.5, y = -7.7, label = syr,
+#     colour = filter(tb, year == syr ) %>% select(color) %>% unlist(use.names = F) %>% head(1),
+#     family = "OpenSans-CondensedLight", size = 35, hjust = 0.5
+#   )
+
+renderPlot <- function(
+  dat, years, base_family = "OpenSans-CondensedLight", title_family = "OpenSans-CondensedBold", ...)
+{
+  sapply(years, function(syr) {
+    gp <- plot_bg(filter(dat, year < syr), ylim = range(dat[,var], na.rm = T), ...) + 
+      plot_layout(base_family, title_family) 
+
+    gp2 <- gp +
+      plot_fg(filter(dat, year == syr)) +
+      annotate(
+        "text", x = 6.5, y = -4, label = syr, 
+        colour = filter(ddd, year == syr ) %>% select(color) %>% unlist(use.names = F) %>% head(1),
+        family = title_family, size = 35, hjust = 0.5
+      )
+    print(gp2)  
+    if(syr %in% top.years) {
+      sapply(1:3, function(i) print(gp2))   
+    }
+    if(syr == 2016) {
+      sapply(1:5, function(i) print(gp2))      
+    }
+  })
+}
+```
+
+```{r render graphic}
+#lang <- 'EN'
+for (lang in colnames(txt)) {
+
+  ddd <- tb
+  if(dev) {
+    ddd <- filter(tb, year >= 2000)
+  }
+  ddd$month <- factor(txt[as.character(ddd$mm), lang], levels =  txt[as.character(1:12), lang])
+  
+  output.file <- paste0(
+    "swissTemperature_", paste0(range(ddd$year), collapse = "_"), 
+    '_', g.width, "_", lang, ifelse(dev, "_dev",""),  ".gif")
+  movie.file <- gsub("\\.gif$", ".mp4", output.file)
+  
+  saveGIF(
+    {
+      renderPlot(
+        dat = ddd, years = unique(ddd$year), title = txt['main.title', lang], 
+        subtitle = paste0(txt['descr1', lang], "\n", txt['descr2', lang]), 
+        source = paste0(txt['source', lang], ": ", txt['source.name', lang], " | @duc_qn | swissinfo.ch"),
+        base_family = txt['base.font', lang], title_family =  txt['title.font', lang]
+      )
+  }, 
+    movie.name = output.file, 
+    interval = 0.17, ani.width = g.width, ani.height = g.width)
+  
+  if(generateVideo) {
+    saveVideo({
+      renderPlot(
+        dat = ddd, years = unique(ddd$year), title = txt['main.title', lang], 
+        subtitle = paste0(txt['descr1', lang], "\n", txt['descr2', lang]), 
+        source = paste0(txt['source', lang], ": ", txt['source.name', lang], " | @duc_qn | swissinfo.ch"),
+        base_family = txt['base.font', lang], title_family =  txt['title.font', lang]
+      )
+    }, interval = 0.15, video.name = movie.file, ani.width = g.width , ani.height = g.width)
+  }  
+}
+
+
+```
+
+
+
+
+```{r DW data export, include=F}
+if(dataExportDW) {
+  lt.mean <- yr %>% filter(year >= yStart.avg, year <= yEnd.avg) %>%
+    summarise(average = mean(y.average)) %>% ungroup() %>%
+    unlist(use.names = F)
+  
+  yr$dev <- yr$y.average - lt.mean 
+
+  write.csv(yr, file = "input/swissTemperature_yearldeviation.csv", row.names = F)
+}
+
+# tb <- left_join(tb, monthly.average)
+# tb$dev <- tb$value - tb$average
+# tb$ydev <- tb$value - tb$mavg
+# 
+# dd <- tb %>% filter(year == 2000)
+# 
+# ggplot(dd) + geom_line(aes(mm, ydev)) + swi_theme()
+# ggplot(dd) + geom_line(aes(mm, dev)) + swi_theme()
+# 
+# ggplot(dd) + geom_polygon(aes(mm, dev), colour = "black", fill = NA) + coord_polar()
+# 
+# ggplot(dd) + geom_polygon(aes(mm, ydev), colour = "black", fill = NA) + 
+#  coord_polar() + scale_x_continuous(breaks = scales::pretty_breaks(n = 12))
+# 
+# ggplot(tb, aes(x=mm, y=year, fill=dev)) + geom_tile(color="white", size=0.1) +
+#  scale_fill_viridis() + coord_equal()
+# 
+
+```

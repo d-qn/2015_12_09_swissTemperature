@@ -1,0 +1,20 @@
+ code,EN,FR,DE,IT,PT,AR,RU,ES,JA,ZH
+main.title,Average temperature in Switzerland 1864-2016,,,,,,,,,
+descr1,In °C. The dotted grey curve is the 1981-2010 monthly average,,,,,,,,,
+descr2,The animation slows down for the 10 hottest years,,,,,,,,,
+1,Jan,,,,,,,,,
+2,Feb,,,,,,,,,
+3,Mar,,,,,,,,,
+4,Apr,,,,,,,,,
+5,May,,,,,,,,,
+6,Jun,,,,,,,,,
+7,Jul,,,,,,,,,
+8,Aug,,,,,,,,,
+9,Sep,,,,,,,,,
+10,Oct,,,,,,,,,
+11,Nov,,,,,,,,,
+12,Dec,,,,,,,,,
+source,Source,source,Quelle,Fonte,fonte,المصدر,Источник,Fuente,出典,来源
+source.name,MeteoSwiss,,,,,,,,,
+title.font,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,OpenSans-CondensedBold,PingFang TC Regular,PingFang TC Regular
+base.font,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,OpenSans-CondensedLight,PingFang TC Thin,PingFang TC Thin
